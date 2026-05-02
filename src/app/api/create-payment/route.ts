@@ -28,10 +28,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing packageId or Amount' }, { status: 400 })
   }
 
-    const amount = packagePrices[packageId as keyof typeof packagePrices]
+  console.log("PACKAGE RECEIVED:", packageId);
+  const amount = packagePrices[packageId as keyof typeof packagePrices] || Amount
 
     if (!amount) {
-      return NextResponse.json({ error: 'Invalid package' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid package - ' + packageId }, { status: 400 })
     }
 
     const checkoutId = `CHK_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`
