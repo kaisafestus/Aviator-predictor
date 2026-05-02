@@ -16,20 +16,23 @@ const packageDurations = {
 export async function POST(req: NextRequest) {
   try {
   const body = await req.json()
-  console.log('RECEIVED BODY:', body);
+  console.log('RECEIVED BODY:', JSON.stringify(body, null, 2));
   
   const { phone, PhoneNumber, Amount, Provider, packageId } = body
   
-  if (!phone && !PhoneNumber) {
+  const finalPhone = phone || PhoneNumber
+  console.log('FINAL PHONE:', finalPhone)
+  
+  if (!finalPhone) {
     return NextResponse.json({ error: 'Missing phone or PhoneNumber' }, { status: 400 })
   }
   
-  if (!packageId && !Amount) {
-    return NextResponse.json({ error: 'Missing packageId or Amount' }, { status: 400 })
+  const finalAmount = packagePrices[packageId as keyof typeof packagePrices] || Amount
+  console.log('FINAL AMOUNT:', finalAmount)
+  
+  if (!finalAmount) {
+    return NextResponse.json({ error: 'Invalid packageId or Amount: ' + JSON.stringify({packageId, Amount}) }, { status: 400 })
   }
-
-  console.log("PACKAGE RECEIVED:", packageId);
-  const amount = packagePrices[packageId as keyof typeof packagePrices] || Amount
 
     if (!amount) {
       return NextResponse.json({ error: 'Invalid package - ' + packageId }, { status: 400 })
@@ -40,9 +43,9 @@ export async function POST(req: NextRequest) {
     const { error: dbError } = await getSupabaseAdmin()
       .from('payments')
       .insert({
-        phone: phone || PhoneNumber,
-        package_id: packageId,
-        amount,
+        phone: finalPhone,
+        package_id: packageId || 'basic',
+        amount: finalAmount,
         status: 'pending',
         checkout_id: checkoutId
       })
@@ -52,7 +55,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create payment record', details: dbError.message, code: dbError.code }, { status: 500 })
     }
 
-    console.log(`💾 Payment saved: ${phone} | ${packageId} | KSH ${amount} | ${checkoutId}`)
+    console.log(`💾 Payment saved: ${finalPhone} | ${packageId || 'basic'} | KSH ${finalAmount} | ${checkoutId}`)
 
     // Verify environment variables
     const payHeroToken = process.env.PAYHERO_TOKEN
