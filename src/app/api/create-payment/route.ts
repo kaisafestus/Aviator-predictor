@@ -15,11 +15,18 @@ const packageDurations = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { phone, packageId } = await req.json()
-
-    if (!phone || !packageId) {
-      return NextResponse.json({ error: 'Missing phone or package ID' }, { status: 400 })
-    }
+  const body = await req.json()
+  console.log('RECEIVED BODY:', body);
+  
+  const { phone, PhoneNumber, Amount, Provider, packageId } = body
+  
+  if (!phone && !PhoneNumber) {
+    return NextResponse.json({ error: 'Missing phone or PhoneNumber' }, { status: 400 })
+  }
+  
+  if (!packageId && !Amount) {
+    return NextResponse.json({ error: 'Missing packageId or Amount' }, { status: 400 })
+  }
 
     const amount = packagePrices[packageId as keyof typeof packagePrices]
 
