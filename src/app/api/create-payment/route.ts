@@ -116,13 +116,16 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        phoneNumber: formattedPhone,
-        amount: amount,
-        accountReference: 'AviatorSignals',
-        accountID: payHeroAccountId,
-        channelID: payHeroChannelId,
-        transactionDesc: `Aviator ${packageId} Package`,
-        callbackUrl: callbackUrl
+        APIPaymentForm: {
+          PhoneNumber: formattedPhone,
+          Amount: amount,
+          Provider: 'MPESA',
+          AccountReference: 'AviatorSignals',
+          AccountID: payHeroAccountId,
+          ChannelID: payHeroChannelId,
+          TransactionDesc: `Aviator ${packageId} Package`,
+          CallbackUrl: callbackUrl
+        }
       })
     })
 
