@@ -81,13 +81,16 @@ export default function Packages() {
 
       const data = await res.json()
 
-      if (data.success) {
+if (data.success) {
         localStorage.setItem('aviator_phone', phone)
         const msg = `STK Push sent to ${phone}! Enter PIN. ID: ${data.checkoutId}`
         setNotification({ message: msg, type: 'success' })
         showPushNotification('🚀 Aviator Signals — STK Sent', msg)
       } else {
-        setNotification({ message: data.error || 'Payment failed', type: 'error' })
+        // Show detailed error from PayHero
+        const errorMsg = data.hint ? `${data.error} (${data.hint})` : data.error
+        const detailsMsg = data.details ? `\n\nDetails: ${JSON.stringify(data.details)}` : ''
+        setNotification({ message: errorMsg + detailsMsg, type: 'error' })
       }
     } catch (error) {
       setNotification({ message: 'Network error. Please check connection.', type: 'error' })

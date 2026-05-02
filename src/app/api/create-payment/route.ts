@@ -46,33 +46,88 @@ export async function POST(req: NextRequest) {
 
     console.log(`💾 Payment saved: ${phone} | ${packageId} | KSH ${amount} | ${checkoutId}`)
 
+    // Verify environment variables
+    const payHeroToken = process.env.PAYHERO_TOKEN
+    const payHeroAccountId = process.env.PAYHERO_ACCOUNT_ID
+    const payHeroChannelId = process.env.PAYHERO_CHANNEL_ID
+
+    console.log('🔑 PayHero Config Check:', {
+      hasToken: !!payHeroToken,
+      tokenPreview: payHeroToken ? payHeroToken.substring(0, 15) + '...' : 'NOT SET',
+      hasAccountId: !!payHeroAccountId,
+      hasChannelId: !!payHeroChannelId
+    })
+
+    if (!payHeroToken || !payHeroAccountId || !payHeroChannelId) {
+      console.error('❌ Missing PayHero config:', {
+        hasToken: !!payHeroToken,
+        hasAccountId: !!payHeroAccountId,
+        hasChannelId: !!payHeroChannelId
+      })
+      return NextResponse.json(
+        { error: 'Payment configuration missing - contact admin', hint: 'Add PAYHERO_TOKEN, PAYHERO_ACCOUNT_ID, PAYHERO_CHANNEL_ID to .env.local' },
+        { status: 500 }
+      )
+    }
+
     const baseUrl = process.env.NEXT_PUBLIC_URL
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
       || 'http://localhost:3000'
     const callbackUrl = `${baseUrl}/api/webhook`
 
-    const authHeader = process.env.PAYHERO_TOKEN?.startsWith('Basic ')
-      ? process.env.PAYHERO_TOKEN
-      : `Bearer ${process.env.PAYHERO_TOKEN}`
+    // Format phone correctly - ensure 2547... format
+    const phoneDigits = phone.replace(/\D/g, '')
+    const formattedPhone = phoneDigits.startsWith('254')
+      ? phoneDigits
+      : phoneDigits.startsWith('7') || phoneDigits.startsWith('1')
+        ? `254${phoneDigits}`
+        : phoneDigits
+
+    console.log('📱 STK Request:', {
+      phone: formattedPhone,
+      amount,
+      packageId,
+      checkoutId,
+      callbackUrl,
+      accountId: payHeroAccountId,
+      channelId: payHeroChannelId
+    })
+
+    // PayHero API - use Basic auth format
+    const authHeader = payHeroToken.startsWith('Basic ')
+      ? payHeroToken
+      : `Basic ${payHeroToken}`
+
+    console.log('📤 Sending PayHero STK Request...')
+    console.log('   Request payload:', JSON.stringify({
+      phoneNumber: formattedPhone,
+      amount: amount,
+      accountReference: 'AviatorSignals',
+      accountID: payHeroAccountId,
+      channelID: payHeroChannelId,
+      transactionDesc: `Aviator ${packageId} Package`,
+      callbackUrl: callbackUrl
+    }, null, 2))
 
     const stkResponse = await fetch('https://api.payhero.co.ke/v1/stkpush', {
       method: 'POST',
       headers: {
-        'Authorization': authHeader!,
+        'Authorization': authHeader,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        PhoneNumber: `254${phone.slice(-9)}`,
-        Amount: amount,
-        AccountReference: 'AviatorSignals',
-        AccountID: process.env.PAYHERO_ACCOUNT_ID,
-        ChannelID: process.env.PAYHERO_CHANNEL_ID,
-        TransactionDesc: `Signals ${packageId}`,
-        CallbackUrl: callbackUrl
+        phoneNumber: formattedPhone,
+        amount: amount,
+        accountReference: 'AviatorSignals',
+        accountID: payHeroAccountId,
+        channelID: payHeroChannelId,
+        transactionDesc: `Aviator ${packageId} Package`,
+        callbackUrl: callbackUrl
       })
     })
 
     const stkData = await stkResponse.json()
+    console.log('📥 PayHero Response:', JSON.stringify(stkData, null, 2))
 
     const payHeroCheckoutId = stkData.CheckoutRequestID
     if (payHeroCheckoutId && payHeroCheckoutId !== checkoutId) {
@@ -84,12 +139,22 @@ export async function POST(req: NextRequest) {
     }
 
     if (stkData.ResponseCode !== '0') {
+      const errorMsg = stkData.ResponseDescription || 'Unknown PayHero error'
+      console.error('❌ PayHero error:', {
+        code: stkData.ResponseCode,
+        description: errorMsg,
+        fullResponse: stkData
+      })
       await getSupabaseAdmin()
         .from('payments')
-        .update({ status: 'failed', result_desc: stkData.ResponseDescription })
+        .update({ status: 'failed', result_desc: errorMsg })
         .eq('checkout_id', payHeroCheckoutId || checkoutId)
 
-      throw new Error(stkData.ResponseDescription)
+      return NextResponse.json({
+        error: `Payment failed: ${errorMsg}`,
+        details: stkData,
+        hint: stkData.ResponseCode === '1000' ? 'Check phone number format (2547xxxxxxxx)' : undefined
+      }, { status: 400 })
     }
 
     console.log(`📱 PayHero STK → ${phone} KSH${amount} | Callback: ${callbackUrl}`)
