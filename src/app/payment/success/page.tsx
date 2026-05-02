@@ -1,9 +1,10 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 
-export default function PaymentSuccess() {
+function ClientPaymentSuccess() {
   const searchParams = useSearchParams()
   const router = useRouter()
   
@@ -49,7 +50,7 @@ export default function PaymentSuccess() {
           <p><span className="font-mono text-green-400">✓</span> Transaction ID: <code className="bg-black/30 px-2 py-1 rounded text-green-400">{transactionId}</code></p>
         </div>
         
-        <div className="glass-p-8 rounded-2xl border border-green-500/30 mb-8">
+        <div className="glass p-8 rounded-2xl border border-green-500/30 mb-8">
           <p className="text-2xl font-bold text-[#22c55e] mb-2">🚀 Aviator Signals Ready!</p>
           <p className="text-lg text-green-300">Redirecting to dashboard in <span className="text-2xl font-black text-yellow-400">{countdown}</span>s</p>
         </div>
@@ -65,3 +66,10 @@ export default function PaymentSuccess() {
   )
 }
 
+export default function PaymentSuccess() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-xl">Loading payment details...</div>}>
+      <ClientPaymentSuccess />
+    </Suspense>
+  )
+}
