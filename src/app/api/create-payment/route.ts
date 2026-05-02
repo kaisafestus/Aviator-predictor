@@ -100,13 +100,16 @@ export async function POST(req: NextRequest) {
 
     console.log('📤 Sending PayHero STK Request...')
     console.log('   Request payload:', JSON.stringify({
-      phoneNumber: formattedPhone,
-      amount: amount,
-      accountReference: 'AviatorSignals',
-      accountID: payHeroAccountId,
-      channelID: payHeroChannelId,
-      transactionDesc: `Aviator ${packageId} Package`,
-      callbackUrl: callbackUrl
+      APIPaymentForm: {
+        PhoneNumber: formattedPhone,
+        Amount: amount,
+        Provider: 'MPESA',
+        AccountReference: 'AviatorSignals',
+        AccountID: payHeroAccountId,
+        ChannelID: payHeroChannelId,
+        TransactionDesc: `Aviator ${packageId} Package`,
+        CallbackUrl: callbackUrl
+      }
     }, null, 2))
 
     const stkResponse = await fetch('https://backend.payhero.co.ke/api/v2/payments', {
@@ -116,16 +119,9 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        APIPaymentForm: {
-          PhoneNumber: formattedPhone,
-          Amount: amount,
-          Provider: 'MPESA',
-          AccountReference: 'AviatorSignals',
-          AccountID: payHeroAccountId,
-          ChannelID: payHeroChannelId,
-          TransactionDesc: `Aviator ${packageId} Package`,
-          CallbackUrl: callbackUrl
-        }
+        Amount: amount,
+        PhoneNumber: formattedPhone,
+        Provider: "m-pesa"
       })
     })
 
