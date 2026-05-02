@@ -76,7 +76,11 @@ export default function Packages() {
       const res = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, packageId: pkgId }),
+body: JSON.stringify({ 
+  PhoneNumber: phone, 
+  Amount: packages.find(p => p.id === pkgId)?.price || 100,
+  Provider: "m-pesa"
+}),
       })
 
       const data = await res.json()
