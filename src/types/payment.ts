@@ -15,6 +15,14 @@ export interface Payment {
   checkoutId: string
 }
 
+export interface CreatePaymentRequest {
+  phone?: string
+  PhoneNumber?: string
+  Amount?: number
+  packageId?: string
+  Provider?: string
+}
+
 export type StkPushResponse = {
   CheckoutRequestID: string
   ResponseCode: string
