@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       callbackUrl: callbackUrl
     }, null, 2))
 
-    const stkResponse = await fetch('https://api.payhero.co.ke/v1/stkpush', {
+    const stkResponse = await fetch('https://backend.payhero.co.ke/api/v2/payments', {
       method: 'POST',
       headers: {
         'Authorization': authHeader,
