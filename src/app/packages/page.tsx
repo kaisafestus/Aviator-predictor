@@ -118,6 +118,8 @@ if (data.success) {
 
           <div className="mb-16 text-center max-w-2xl mx-auto">
             <input
+              id="phone"
+              name="phone"
               type="tel"
               placeholder="2547xxxxxxxx (No +)"
               value={phone}
