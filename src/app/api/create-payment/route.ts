@@ -149,20 +149,26 @@ export async function POST(req: NextRequest) {
 
     console.log('📤 PayHero STK Request to', validatedPhone)
 
+// Test both formats for PayHero
+    const payHeroPhone = validatedPhone.startsWith('2547') ? '0' + validatedPhone.slice(4) : validatedPhone
+    const payHeroRequest = {
+      Amount: amount,
+      PhoneNumber: payHeroPhone,
+      Provider: Provider || 'm-pesa'
+    }
+    console.log('🚀 PayHero EXACT REQUEST:', JSON.stringify(payHeroRequest, null, 2))
+    
     const stkResponse = await fetch('https://backend.payhero.co.ke/api/v2/payments', {
       method: 'POST',
       headers: {
         'Authorization': authHeader,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        Amount: amount,
-        PhoneNumber: validatedPhone,
-        Provider: Provider || 'm-pesa'
-      })
+      body: JSON.stringify(payHeroRequest)
     })
-
+    
     const stkData = await stkResponse.json()
+    console.log('📥 PayHero Response:', JSON.stringify(stkData, null, 2))
     console.log('📥 PayHero Response:', JSON.stringify(stkData, null, 2))
 
     const payHeroCheckoutId = stkData.CheckoutRequestID
