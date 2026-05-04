@@ -62,13 +62,11 @@ export async function POST(req: NextRequest) {
     console.log('📥 RECEIVED BODY:', JSON.stringify(body, null, 2))
     console.log('🔍 RAW HEADERS:', Object.fromEntries(req.headers.entries()))
 
-
     const { phone, PhoneNumber, Amount, packageId, Provider } = body || {}
     if (!body) {
       console.error('🚨 EMPTY BODY - Parsing failed!')
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
-
 
     // Step 1: Strict phone validation FIRST
     const finalPhoneResult = validateAndNormalizePhone(phone || PhoneNumber)
@@ -84,7 +82,6 @@ export async function POST(req: NextRequest) {
       console.error('💥 VALIDATION PASSED BUT PHONE STILL NULL!', { phone, PhoneNumber, validatedPhone })
       return NextResponse.json({ error: 'Internal validation error - phone missing' }, { status: 500 })
     }
-
 
     // Step 2: Amount validation
     const amountFromPackage = packagePrices[(packageId || 'basic') as keyof typeof packagePrices]
@@ -129,7 +126,6 @@ export async function POST(req: NextRequest) {
       .from('payments')
       .insert(insertData)
 
-
     if (dbError) {
       console.error('Supabase insert error:', dbError)
       return NextResponse.json({ 
@@ -149,7 +145,7 @@ export async function POST(req: NextRequest) {
 
     console.log('📤 PayHero STK Request to', validatedPhone)
 
-// Test both formats for PayHero
+    // Test both formats for PayHero
     const payHeroPhone = validatedPhone.startsWith('2547') ? '0' + validatedPhone.slice(4) : validatedPhone
     const payHeroRequest = {
       Amount: amount,
@@ -168,7 +164,6 @@ export async function POST(req: NextRequest) {
     })
     
     const stkData = await stkResponse.json()
-    console.log('📥 PayHero Response:', JSON.stringify(stkData, null, 2))
     console.log('📥 PayHero Response:', JSON.stringify(stkData, null, 2))
 
     const payHeroCheckoutId = stkData.CheckoutRequestID
@@ -207,7 +202,7 @@ export async function POST(req: NextRequest) {
       url: req.url,
       method: req.method,
       headers: Object.fromEntries(req.headers.entries()),
-      body
+      body: undefined
     })
     return NextResponse.json({ 
       error: 'Internal server error',
@@ -215,5 +210,4 @@ export async function POST(req: NextRequest) {
     }, { status: 500 })
   }
 }
-
 
