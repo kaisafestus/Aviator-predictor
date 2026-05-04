@@ -59,9 +59,16 @@ function validateAndNormalizePhone(phoneInput: string | undefined): { valid: fal
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as CreatePaymentRequest
-    console.log('RECEIVED BODY:', JSON.stringify(body, null, 2))
+    console.log('📥 RECEIVED BODY:', JSON.stringify(body, null, 2))
+    console.log('🔍 RAW HEADERS:', Object.fromEntries(req.headers.entries()))
 
-    const { phone, PhoneNumber, Amount, packageId, Provider } = body
+
+    const { phone, PhoneNumber, Amount, packageId, Provider } = body || {}
+    if (!body) {
+      console.error('🚨 EMPTY BODY - Parsing failed!')
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
+
 
     // Step 1: Strict phone validation FIRST
     const finalPhoneResult = validateAndNormalizePhone(phone || PhoneNumber)
@@ -69,8 +76,15 @@ export async function POST(req: NextRequest) {
       console.log('❌ Phone validation failed:', finalPhoneResult.error)
       return NextResponse.json({ error: finalPhoneResult.error }, { status: 400 })
     }
-    const validatedPhone = finalPhoneResult.phone
+    const validatedPhone = finalPhoneResult.phone!
     console.log('✅ Validated phone:', validatedPhone)
+    
+    // 🔥 CRITICAL: Final null-safety check
+    if (!validatedPhone) {
+      console.error('💥 VALIDATION PASSED BUT PHONE STILL NULL!', { phone, PhoneNumber, validatedPhone })
+      return NextResponse.json({ error: 'Internal validation error - phone missing' }, { status: 500 })
+    }
+
 
     // Step 2: Amount validation
     const amountFromPackage = packagePrices[(packageId || 'basic') as keyof typeof packagePrices]
@@ -100,16 +114,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Step 5: NOW insert to DB after all validations (phone guaranteed non-null)
+    // 🔥 Step 5: DB Insert with FULL DEBUG LOGGING
+    const insertData = {
+      phone: validatedPhone,
+      package_id: packageId || 'basic',
+      amount: Number(amount),
+      status: 'pending',
+      checkout_id: checkoutId
+    }
+    console.log('💾 EXACT INSERT DATA:', JSON.stringify(insertData, null, 2))
+    console.log('🚨 PHONE BEFORE INSERT:', validatedPhone, 'TYPE:', typeof validatedPhone, 'LENGTH:', validatedPhone?.length)
+    
     const { error: dbError } = await getSupabaseAdmin()
       .from('payments')
-      .insert({
-        phone: validatedPhone,
-        package_id: packageId || 'basic',
-        amount: Number(amount),
-        status: 'pending',
-        checkout_id: checkoutId
-      })
+      .insert(insertData)
+
 
     if (dbError) {
       console.error('Supabase insert error:', dbError)
@@ -178,10 +197,17 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('💥 Unexpected error:', error)
+    console.error('📋 Full request details:', {
+      url: req.url,
+      method: req.method,
+      headers: Object.fromEntries(req.headers.entries()),
+      body
+    })
     return NextResponse.json({ 
       error: 'Internal server error',
-      hint: 'Check server logs'
+      hint: 'Check server logs for RECEIVED BODY and EXACT INSERT DATA'
     }, { status: 500 })
   }
 }
+
 
