@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
     console.log('🔍 RAW HEADERS:', Object.fromEntries(req.headers.entries()))
 
     const { phone, PhoneNumber, Amount, packageId, Provider } = body || {}
+    console.log("BODY:", req.body) // DEBUG per task (NextRequest)
+    console.log("PHONE:", phone); // DEBUG per task
     if (!body) {
       console.error('🚨 EMPTY BODY - Parsing failed!')
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
@@ -145,15 +147,21 @@ export async function POST(req: NextRequest) {
 
     console.log('📤 PayHero STK Request to', validatedPhone)
 
-    // Test both formats for PayHero
-    const payHeroPhone = validatedPhone.startsWith('2547') ? '0' + validatedPhone.slice(4) : validatedPhone
-    const payHeroRequest = {
-      Amount: amount,
-      PhoneNumber: payHeroPhone,
-      Provider: Provider || 'm-pesa'
+    // PayHero expects Kenyan format: 2547XXXXXXXX (NOT 07... and NOT null)
+    const formattedPhoneForPayHero = validatedPhone
+    if (!formattedPhoneForPayHero) {
+      return NextResponse.json({ error: 'Phone is required for PayHero' }, { status: 400 })
     }
+
+    // Minimal PayHero request (PhoneNumber + Amount)
+    const payHeroRequest = {
+      Amount: Number(amount),
+      PhoneNumber: String(formattedPhoneForPayHero),
+    }
+
+    console.log('📤 Sending to PayHero:', formattedPhoneForPayHero)
     console.log('🚀 PayHero EXACT REQUEST:', JSON.stringify(payHeroRequest, null, 2))
-    
+
     const stkResponse = await fetch('https://backend.payhero.co.ke/api/v2/payments', {
       method: 'POST',
       headers: {

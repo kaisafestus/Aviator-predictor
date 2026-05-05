@@ -71,16 +71,18 @@ export default function Packages() {
       return
     }
 
+    console.log({ phone, packageId: pkgId }); // FINAL CHECK per task
     setLoading(pkgId)
     try {
       const res = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ 
-  PhoneNumber: phone, 
-  Amount: packages.find(p => p.id === pkgId)?.price || 100,
-  Provider: "m-pesa"
-}),
+        body: JSON.stringify({ 
+          phone,
+          packageId: pkgId,
+          Amount: packages.find(p => p.id === pkgId)?.price || 100,
+          Provider: "m-pesa"
+        }),
       })
 
       const data = await res.json()
