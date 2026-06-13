@@ -1,1 +1,6 @@
-✅ 4. Edit src/app/packages/page.tsx: Add console.log({ phone, packageId }), align body to task format&#10;✅ 5. Edit src/app/api/create-payment/route.ts: Add console.log("PHONE:", phone) debug&#10;✅ 6. Test: User says "run the project" - npm run dev started&#10;⏳ 7. attempt_completion&#10;&#10;Status: All edits complete, dev server running at localhost:3000. Test /packages, buy flow, check browser console + server logs for phone/packageId logs and Supabase insert. Fixes match task exactly.
+# TODO
+
+- [ ] Modify `src/app/dashboard/page.tsx` multiplier generator to increase frequency of rare high crash multipliers (300+ and 500+).
+- [ ] Run Next dev/build to ensure no TypeScript/ESLint errors and verify the dashboard shows more frequent mega crashes.
+
+

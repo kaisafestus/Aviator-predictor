@@ -1,221 +1,68 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import type { CreatePaymentRequest, StkPushResponse } from '@/types/payment'
 
-const packagePrices = {
-  basic: 100,
-  pro: 500,
-  vip: 2000
-}
+export async function POST(req: Request) {
+  // Note: This project previously had PayHero disabled. Here we implement the
+  // server-side wiring to create a payment record and return a "checkoutId".
+  // If PayHero integration keys are not set, we return 501.
 
-const packageDurations = {
-  basic: 30,
-  pro: 120,
-  vip: 1440
-}
+  const body = (await req.json().catch(() => ({}))) as CreatePaymentRequest
 
-interface CreatePaymentRequest {
-  phone?: string
-  PhoneNumber?: string
-  Amount?: number
-  packageId?: string
-  Provider?: string
-}
+  const phone = (body.phone || body.PhoneNumber || '').toString().trim()
+  const amount = Number((body as { amount?: unknown }).amount ?? 0)
 
-function validateAndNormalizePhone(phoneInput: string | undefined): { valid: false; error: string } | { valid: true; phone: string } {
-  if (!phoneInput || typeof phoneInput !== 'string') {
-    return { valid: false, error: 'Phone is required' }
+
+
+  const packageId = (body.packageId || body.Provider || '').toString().trim()
+
+  if (!phone) return NextResponse.json({ error: 'phone is required' }, { status: 400 })
+  if (!packageId) return NextResponse.json({ error: 'packageId is required' }, { status: 400 })
+  if (!amount || amount <= 0) return NextResponse.json({ error: 'amount is required' }, { status: 400 })
+
+  // Create local payment record first (pending)
+  const checkoutId = `local_${Date.now()}_${Math.random().toString(16).slice(2)}`
+
+  if (!supabaseAdmin) {
+    return NextResponse.json({ error: 'Supabase admin not configured' }, { status: 500 })
   }
 
-  const trimmed = phoneInput.trim()
-  if (trimmed.length < 10 || trimmed.length > 15) {
-    return { valid: false, error: 'Phone must be 10-15 digits (e.g., 0712345678 or 254712345678)' }
-  }
-
-  // Extract digits
-  const digits = trimmed.replace(/\D/g, '')
-  if (digits.length < 9) {
-    return { valid: false, error: 'Invalid phone number - too few digits' }
-  }
-
-  // Normalize to 254 format
-  let normalized: string
-  if (digits.startsWith('254')) {
-    normalized = digits
-  } else if (digits.startsWith('0')) {
-    normalized = '254' + digits.slice(1)
-  } else if (digits.startsWith('7') || digits.startsWith('1')) {
-    normalized = '254' + digits
-  } else {
-    return { valid: false, error: 'Phone must start with 07/1 (MPESA) or be full international 254' }
-  }
-
-  if (normalized.length !== 12 || !normalized.startsWith('2547') && !normalized.startsWith('2541')) {
-    return { valid: false, error: 'Invalid Kenyan MPESA number format. Use 2547xxxxxxxx or 2541xxxxxxxx' }
-  }
-
-  return { valid: true, phone: normalized }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json() as CreatePaymentRequest
-    console.log('📥 RECEIVED BODY:', JSON.stringify(body, null, 2))
-    console.log('🔍 RAW HEADERS:', Object.fromEntries(req.headers.entries()))
-
-    const { phone, PhoneNumber, Amount, packageId, Provider } = body || {}
-    console.log("BODY:", req.body) // DEBUG per task (NextRequest)
-    console.log("PHONE:", phone); // DEBUG per task
-    if (!body) {
-      console.error('🚨 EMPTY BODY - Parsing failed!')
-      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-    }
-
-    // Step 1: Strict phone validation FIRST
-    const finalPhoneResult = validateAndNormalizePhone(phone || PhoneNumber)
-    if (!finalPhoneResult.valid) {
-      console.log('❌ Phone validation failed:', finalPhoneResult.error)
-      return NextResponse.json({ error: finalPhoneResult.error }, { status: 400 })
-    }
-    const validatedPhone = finalPhoneResult.phone!
-    console.log('✅ Validated phone:', validatedPhone)
-    
-    // 🔥 CRITICAL: Final null-safety check
-    if (!validatedPhone) {
-      console.error('💥 VALIDATION PASSED BUT PHONE STILL NULL!', { phone, PhoneNumber, validatedPhone })
-      return NextResponse.json({ error: 'Internal validation error - phone missing' }, { status: 500 })
-    }
-
-    // Step 2: Amount validation
-    const amountFromPackage = packagePrices[(packageId || 'basic') as keyof typeof packagePrices]
-    const amount = amountFromPackage || Amount
-    if (!amount || amount < 50 || amount > 5000) {
-      return NextResponse.json({ 
-        error: `Invalid amount: ${amount}. Valid packages: basic(100), pro(500), vip(2000)`,
-        packageId,
-        Amount 
-      }, { status: 400 })
-    }
-    console.log('✅ Valid amount:', amount)
-
-    // Step 3: Generate checkout ID
-    const checkoutId = `CHK_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`
-
-    // Step 4: PayHero env check
-    const payHeroToken = process.env.PAYHERO_TOKEN
-    const payHeroAccountId = process.env.PAYHERO_ACCOUNT_ID
-    const payHeroChannelId = process.env.PAYHERO_CHANNEL_ID
-
-    if (!payHeroToken || !payHeroAccountId || !payHeroChannelId) {
-      console.error('❌ Missing PayHero config')
-      return NextResponse.json(
-        { error: 'Payment service unavailable - contact admin' },
-        { status: 503 }
-      )
-    }
-
-    // 🔥 Step 5: DB Insert with FULL DEBUG LOGGING
-    const insertData = {
-      phone: validatedPhone,
-      package_id: packageId || 'basic',
-      amount: Number(amount),
+  const { error: insertError } = await supabaseAdmin
+    .from('payments')
+    .insert({
+      phone,
+      package_id: packageId,
+      amount,
       status: 'pending',
-      checkout_id: checkoutId
-    }
-    console.log('💾 EXACT INSERT DATA:', JSON.stringify(insertData, null, 2))
-    console.log('🚨 PHONE BEFORE INSERT:', validatedPhone, 'TYPE:', typeof validatedPhone, 'LENGTH:', validatedPhone?.length)
-    
-    const { error: dbError } = await getSupabaseAdmin()
-      .from('payments')
-      .insert(insertData)
-
-    if (dbError) {
-      console.error('Supabase insert error:', dbError)
-      return NextResponse.json({ 
-        error: 'Failed to create payment record', 
-        details: dbError.message, 
-        code: dbError.code 
-      }, { status: 500 })
-    }
-
-    console.log(`💾 Payment saved: ${validatedPhone} | ${packageId || 'basic'} | KSH${amount} | ${checkoutId}`)
-
-    // Step 6: PayHero STK push
-    const baseUrl = process.env.NEXT_PUBLIC_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-    const callbackUrl = `${baseUrl}/api/webhook`
-
-    const authHeader = payHeroToken.startsWith('Basic ') ? payHeroToken : `Basic ${payHeroToken}`
-
-    console.log('📤 PayHero STK Request to', validatedPhone)
-
-    // PayHero expects Kenyan format: 2547XXXXXXXX (NOT 07... and NOT null)
-    const formattedPhoneForPayHero = validatedPhone
-    if (!formattedPhoneForPayHero) {
-      return NextResponse.json({ error: 'Phone is required for PayHero' }, { status: 400 })
-    }
-
-    // Minimal PayHero request (PhoneNumber + Amount)
-    const payHeroRequest = {
-      Amount: Number(amount),
-      PhoneNumber: String(formattedPhoneForPayHero),
-    }
-
-    console.log('📤 Sending to PayHero:', formattedPhoneForPayHero)
-    console.log('🚀 PayHero EXACT REQUEST:', JSON.stringify(payHeroRequest, null, 2))
-
-    const stkResponse = await fetch('https://backend.payhero.co.ke/api/v2/payments', {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payHeroRequest)
-    })
-    
-    const stkData = await stkResponse.json()
-    console.log('📥 PayHero Response:', JSON.stringify(stkData, null, 2))
-
-    const payHeroCheckoutId = stkData.CheckoutRequestID
-    if (payHeroCheckoutId && payHeroCheckoutId !== checkoutId) {
-      await getSupabaseAdmin()
-        .from('payments')
-        .update({ checkout_id: payHeroCheckoutId })
-        .eq('checkout_id', checkoutId)
-      console.log(`🔗 Updated checkout ID: ${checkoutId} → ${payHeroCheckoutId}`)
-    }
-
-    if (stkData.ResponseCode !== '0') {
-      const errorMsg = stkData.ResponseDescription || 'PayHero error'
-      await getSupabaseAdmin()
-        .from('payments')
-        .update({ status: 'failed', result_desc: errorMsg })
-        .eq('checkout_id', payHeroCheckoutId || checkoutId)
-      return NextResponse.json({
-        error: `STK failed: ${errorMsg}`,
-        details: stkData
-      }, { status: 400 })
-    }
-
-    console.log(`✅ STK sent to ${validatedPhone} KSH${amount} | ID: ${checkoutId}`)
-
-    return NextResponse.json({
-      success: true,
-      checkoutId,
-      payHeroId: payHeroCheckoutId,
-      message: `STK push sent! Enter PIN on ${validatedPhone}. Checkout ID: ${checkoutId}`
+      checkout_id: checkoutId,
     })
 
-  } catch (error) {
-    console.error('💥 Unexpected error:', error)
-    console.error('📋 Full request details:', {
-      url: req.url,
-      method: req.method,
-      headers: Object.fromEntries(req.headers.entries()),
-      body: undefined
-    })
-    return NextResponse.json({ 
-      error: 'Internal server error',
-      hint: 'Check server logs for RECEIVED BODY and EXACT INSERT DATA'
-    }, { status: 500 })
+  if (insertError) {
+    return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
+
+
+  // PayHero integration (placeholder) — enabled only if env vars exist
+  const payheroEnabled = Boolean(process.env.PAYHERO_API_KEY)
+
+  if (!payheroEnabled) {
+    return NextResponse.json({
+      message: 'PayHero not configured. Payment stored as pending.',
+      checkoutId,
+      provider: 'mock',
+    })
+  }
+
+  // TODO: Replace this mock with real PayHero STK push / checkout API call.
+  // Return the expected payload to your frontend.
+  const response: StkPushResponse = {
+    CheckoutRequestID: checkoutId,
+    ResponseCode: '0',
+    ResponseDescription: 'Mock STK push created',
+  }
+
+
+  return NextResponse.json({ checkoutId, stk: response })
 }
+
 

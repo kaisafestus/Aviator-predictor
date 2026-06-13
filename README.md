@@ -1,11 +1,10 @@
 # Aviator Signals - Kenyan Betting Site 🚀
 
 ## Features
-- **Target: Kenyans only** – MPESA STK Push (PayHero)
 - Live Aviator crash signals (95% win rate demo)
 - Packages: KSH100/10min → KSH2000/day
 - Pro neon betting design
-- Supabase auth/DB ready
+
 
 ## How to Deploy Production
 ```
@@ -14,18 +13,12 @@
 ↓ https://your-aviator.vercel.app
 ```
 
-## PayHero Setup
-```
-PayHero Dashboard:
-- Callback: https://your-site.vercel.app/api/webhook
-- .env.local: PAYHERO_TOKEN=sk_live_...
-```
-
 ## Test Local
 ```
 npm run dev
-localhost:3000/packages → Buy → STK sim
+localhost:3000/packages
 ```
+
 
 ## File Structure
 ```
@@ -38,4 +31,5 @@ src/app/
     └── webhook/route.ts (Callback)
 ```
 
-**Pure Kenyan MPESA + Supabase – Ready to earn!** 🎰🇰🇪
+**Aviator Signals – Ready to earn!**
+

@@ -15,7 +15,7 @@
   --aviator-grid: 160 80% 25%;
 }
 
-@theme inline {
+:root {
   --color-background: 220 30% 5%;
   --color-foreground: 0 0% 98%;
   --font-sans: var(--font-geist-sans);
@@ -56,6 +56,7 @@ body {
 .grid-line { animation: grid-line 3s ease-in-out infinite; }
 
 .glass {
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   background: rgba(17, 24, 39, 0.7);
   border: 1px solid rgba(34, 197, 94, 0.15);

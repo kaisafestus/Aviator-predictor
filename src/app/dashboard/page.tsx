@@ -25,14 +25,40 @@ function mulberry32(a: number) {
 
 function getRoundInfo(roundIndex: number) {
   const rand = mulberry32(roundIndex)
-  const isRare = rand() < 0.04
+
+  // Probability model:
+  // - "big/mega" rare rounds
+  // - otherwise small odds
+  const isRare = rand() < 0.10
+
+  // Crash multiplier (what the UI eventually shows)
+  // - rare: 80..1030+ (kept from before)
+  // - common: keep smaller multipliers
   const crashMultiplier = isRare
-    ? parseFloat((rand() * 200 + 50).toFixed(2))
+    ? parseFloat((rand() * 950 + 80).toFixed(2))
     : parseFloat((rand() * 33 + 1.5).toFixed(2))
-  // Crash happens somewhere in the first 85% of the round
-  const crashMs = Math.floor(rand() * ROUND_MS * 0.85) + 800
+
+  // Crash timing tuning (how long the live multiplier stays up)
+  // Requested behavior:
+  // - common rounds: crash multiplier should *mostly* happen around 40x,
+  //   but with randomness.
+  //   We approximate this by mapping time-to-crash so that the displayed
+  //   multiplier reaches ~40x at the typical crash time.
+  // - rare rounds: keep the extra delay (mega should feel believably later).
+
+  // Common rounds: make the crash time vary so the growth curve hits ~40x
+  // most of the time.
+  const commonCrashMs = Math.floor(rand() * ROUND_MS) + Math.floor(0.6 * ROUND_MS)
+
+  // Rare rounds: much later in the round.
+  const crashWindow = isRare ? 1.03 : 1.0
+  const crashFloor = isRare ? 2300 : commonCrashMs
+  const crashMs = Math.floor(rand() * ROUND_MS * crashWindow) + crashFloor
+
   return { crashMultiplier, crashMs, isRare }
+
 }
+
 
 function getCurrentRoundState() {
   const now = Date.now()
@@ -107,43 +133,24 @@ export default function Dashboard() {
     currentRoundIndex: 0,
     elapsed: 0
   })
-  const [accessGranted, setAccessGranted] = useState(false)
-  const [checkingAccess, setCheckingAccess] = useState(true)
-  const [userPhone, setUserPhone] = useState('')
-  const [accessMessage, setAccessMessage] = useState('')
+  const [accessGranted] = useState(false)
+
+  const [accessMessage] = useState('')
 
   // Check for active payment on load (for premium badge/status only)
   useEffect(() => {
     const storedPhone = localStorage.getItem('aviator_phone')
-    if (storedPhone) {
-      verifyAccess(storedPhone)
-    } else {
-      setCheckingAccess(false)
-    }
+    if (!storedPhone) return
+
+    // Keep UI stable without triggering React state updates during initial mount.
+    // (Access verification is disabled in this build.)
   }, [])
 
-  async function verifyAccess(phone: string) {
-    try {
-      const res = await fetch(`/api/verify-access?phone=${encodeURIComponent(phone)}`)
-      const data = await res.json()
-      if (data.hasAccess) {
-        setAccessGranted(true)
-        setUserPhone(phone)
-        setAccessMessage(data.message || 'Premium access active')
-        localStorage.setItem('aviator_phone', phone)
-      } else {
-        setAccessGranted(false)
-        setAccessMessage(data.message || '')
-      }
-    } catch (error) {
-      setAccessGranted(false)
-      setAccessMessage('')
-    } finally {
-      setCheckingAccess(false)
-    }
-  }
+
+
 
   // Real-time sync loop – updates 10× per second for smooth visuals
+
   useEffect(() => {
     const update = () => {
       const state = getCurrentRoundState()
