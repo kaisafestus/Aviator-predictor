@@ -11,7 +11,9 @@ interface CreatePaymentRequestBody {
 
 export async function POST(req: Request) {
   try {
-    if (!supabaseAdmin) throw new Error('Supabase admin not configured');
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Supabase admin not configured' }, { status: 500 });
+    }
 
     const { phone, packageId, amount }: CreatePaymentRequestBody = await req.json();
 
@@ -19,10 +21,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid input data' }, { status: 400 });
     }
 
-    // Format phone to 254...
-    const formattedPhone = phone.startsWith('0') 
-      ? `254${phone.substring(1)}` 
-      : phone.startsWith('+') ? phone.substring(1) : phone;
+    // Strict formatting for M-Pesa (2547XXXXXXXX)
+    let formattedPhone = phone.replace(/\D/g, ''); // Remove non-digits
+    if (formattedPhone.startsWith('0')) {
+      formattedPhone = '254' + formattedPhone.substring(1);
+    } else if (formattedPhone.startsWith('7') || formattedPhone.startsWith('1')) {
+      formattedPhone = '254' + formattedPhone;
+    }
+    if (!formattedPhone.match(/^254[71]\d{8}$/)) {
+      return NextResponse.json({ error: 'Please enter a valid M-Pesa number' }, { status: 400 });
+    }
 
     // 1. Insert pending payment record
     const { data: payment, error: insertError } = await supabaseAdmin
@@ -56,24 +64,24 @@ export async function POST(req: Request) {
     const callbackUrl = `${appBaseUrl}/api/webhook`;
 
     const payheroPayload = {
-      amount,
+      amount: Math.round(amount), // Ensure it's a whole number
       phone_number: formattedPhone,
       channel_id: parseInt(channelId),
       service_id: parseInt(serviceId),
-      external_reference: `AVIATOR-${paymentId}`,
+      external_reference: `AVIATOR-${paymentId}`, // This is crucial for the webhook
       callback_url: callbackUrl
     };
 
     const payheroResponse = await axios.post(payheroUrl, payheroPayload, {
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': authToken
+        'Authorization': authToken // Using the provided Basic Auth string
       }
     });
 
     // 3. Update record with PayHero checkout ID
     const payheroData = payheroResponse.data;
-    const payheroTransactionId = payheroData.CheckoutRequestID || payheroData.checkout_id;
+    const payheroTransactionId = payheroData.CheckoutRequestID || payheroData.checkout_id || payheroData.transaction_id;
 
     await supabaseAdmin
       .from('payments')

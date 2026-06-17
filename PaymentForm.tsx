@@ -33,6 +33,8 @@ export default function PaymentForm({ packages }: PaymentFormProps) {
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent multiple submissions
+
     setLoading(true);
     setMessage(null);
     setError(null);
@@ -63,7 +65,7 @@ export default function PaymentForm({ packages }: PaymentFormProps) {
         throw new Error(data.error || 'Failed to initiate payment');
       }
 
-      setMessage(data.message || 'Payment initiated. Please complete the STK push on your phone.');
+      setMessage('STK Push sent! Please check your phone to enter your M-Pesa PIN.');
       setCurrentPaymentId(data.paymentId);
 
       // Optional: Listen for real-time updates on payment status
@@ -83,10 +85,12 @@ export default function PaymentForm({ packages }: PaymentFormProps) {
               if (newStatus === 'paid') {
                 setMessage('Payment successful! Redirecting...');
                 channel.unsubscribe();
-                // Redirect or update UI after successful payment
-                router.push('/dashboard?payment_success=true');
+                setTimeout(() => {
+                  router.push('/dashboard?payment_success=true');
+                }, 1500);
               } else if (newStatus === 'failed' || newStatus === 'cancelled') {
-                setError(`Payment ${newStatus}. Please try again.`);
+                setError(`Transaction ${newStatus}. Please try again.`);
+                setLoading(false);
                 channel.unsubscribe();
               }
             }
