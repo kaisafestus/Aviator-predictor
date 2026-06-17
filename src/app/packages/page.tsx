@@ -102,14 +102,32 @@ export default function Packages() {
         return
       }
 
-      const params = new URLSearchParams({
-        transaction: data.checkoutId || '',
-        package: pkg.id,
-        amount: String(pkg.price),
-        phone,
-      })
+      // If the backend returned a mock provider (PayHero not configured), don't
+      // treat this as a completed STK push. Show a notification and do not
+      // redirect to success page unless the provider returned an `stk` object.
+      if (data?.provider === 'mock') {
+        setNotification({
+          message: data?.message || 'Payment recorded locally. Payment provider not configured.',
+          type: 'info',
+        })
+        return
+      }
 
-      window.location.href = `/payment/success?${params.toString()}`
+      if (data?.provider === 'payhero' && data?.stk) {
+        const params = new URLSearchParams({
+          transaction: data.checkoutId || '',
+          package: pkg.id,
+          amount: String(pkg.price),
+          phone,
+        })
+
+        window.location.href = `/payment/success?${params.toString()}`
+        return
+      }
+
+      // If provider reported an error, show it.
+      setNotification({ message: data?.error || 'Payment created but STK push failed', type: 'error' })
+      return
     } finally {
       setLoading(false)
     }

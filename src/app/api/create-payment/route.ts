@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   const payheroAuth = process.env.PAYHERO_BASIC_AUTH_TOKEN
 
   if (!payheroStkUrl || !payheroAuth) {
-    // Not configured: return mock response so frontend can continue
+    // Not configured: keep the payment as pending but signal provider is mock.
     return NextResponse.json({
       message: 'PayHero not configured. Payment stored as pending.',
       checkoutId,
@@ -62,14 +62,20 @@ export async function POST(req: Request) {
       phone,
       amount,
       checkoutId,
+      accountId: process.env.PAYHERO_ACCOUNT_ID,
+      channelId: process.env.PAYHERO_CHANNEL_ID,
     })
 
-    return NextResponse.json({ checkoutId, stk })
+    // Return provider name so the frontend can decide whether to redirect.
+    return NextResponse.json({ checkoutId, stk, provider: 'payhero' })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'PayHero request failed'
-    // Do NOT roll back the DB insert – we keep the payment as pending and
-    // surface the error to the frontend for debugging.
-    return NextResponse.json({ error: message, checkoutId }, { status: 502 })
+    // Log the error server-side for debugging
+    // eslint-disable-next-line no-console
+    console.error('[create-payment] PayHero error', { message })
+    // Do NOT roll back the DB insert – we keep the payment as pending.
+    // Surface the error to the frontend with a 502 so the UI doesn't show success.
+    return NextResponse.json({ error: message, checkoutId, provider: 'payhero_error' }, { status: 502 })
   }
 }
 

@@ -39,11 +39,21 @@ export async function payheroStkPush(params: StkPushParams): Promise<StkPushResp
     body: JSON.stringify(payload),
   })
 
-  const data = await res.json().catch(() => ({}))
+  // Try to parse JSON body, but fall back to text if parsing fails.
+  const text = await res.text().catch(() => '')
+  let data: unknown = {}
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch (e) {
+    data = { raw: text }
+  }
 
   if (!res.ok) {
-    // Attempt to provide a helpful error message
-    const message = (data && (data.error || data.message)) || `PayHero error: ${res.status}`
+    const bodyInfo = typeof data === 'object' && data ? JSON.stringify(data).slice(0, 1000) : String(data)
+    const message = `PayHero error ${res.status}: ${bodyInfo}`
+    // Log on the server so you can inspect Vercel logs without exposing secrets
+    // eslint-disable-next-line no-console
+    console.error('[payheroStkPush] request failed', { url, payload: { AccountId: payload.AccountId, ChannelId: payload.ChannelId, Amount: payload.Amount }, status: res.status, body: bodyInfo })
     throw new Error(message)
   }
 
