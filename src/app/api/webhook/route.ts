@@ -6,36 +6,27 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  // PayHero webhook handling should:
-  // - validate signature (if supported)
-  // - read checkout/transaction id + result
-  // - mark payments.status to paid/failed
-  // For now, implement a minimal handler that accepts JSON:
-  // { checkoutId: string, status: 'paid' | 'failed' }
+  try {
+    const payload = await req.json();
+    console.log('PayHero Webhook:', payload);
 
-  const payload = (await req.json().catch(() => ({}))) as Record<string, unknown>
+    const reference = payload.external_reference || payload.TransactionReference;
+    const statusRaw = (payload.Status || '').toString().toLowerCase();
+    const resultCode = payload.ResultCode?.toString();
 
-  const checkoutId = ((payload.checkoutId ?? payload.CheckoutRequestID) ?? '').toString()
-  const statusRaw = ((payload.status ?? payload.paymentStatus) ?? '').toString().toLowerCase()
+    if (reference && reference.startsWith('AVIATOR-')) {
+      const paymentId = reference.replace('AVIATOR-', '');
+      const isSuccess = statusRaw === 'success' || resultCode === '0';
+      const finalStatus = isSuccess ? 'paid' : 'failed';
 
+      await supabaseAdmin
+        ?.from('payments')
+        .update({ status: finalStatus, provider_response: payload })
+        .eq('id', paymentId);
+    }
 
-  if (!checkoutId) return NextResponse.json({ error: 'checkoutId is required' }, { status: 400 })
-
-  const status = statusRaw === 'paid' ? 'paid' : statusRaw === 'failed' ? 'failed' : 'paid'
-
-  if (!supabaseAdmin) {
-    return NextResponse.json({ error: 'Supabase admin not configured' }, { status: 500 })
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
-
-  const { error } = await supabaseAdmin
-    .from('payments')
-    .update({ status })
-    .eq('checkout_id', checkoutId)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-
-  return NextResponse.json({ ok: true, checkoutId, status })
 }
-
-

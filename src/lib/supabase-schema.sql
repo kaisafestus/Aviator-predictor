@@ -33,20 +33,41 @@ create table if not exists payments (
   package_id text not null references packages(id) on update cascade on delete restrict,
   amount numeric not null,
   status text not null default 'pending' check (status in ('pending','paid','failed','cancelled')),
+  payhero_transaction_id text,
+  provider_response jsonb,
   created_at timestamptz not null default now(),
-  checkout_id text
+  updated_at timestamptz not null default now()
 );
+
+-- Ensure columns exist if the table was created by an older version of the schema
+alter table payments add column if not exists payhero_transaction_id text;
+alter table payments add column if not exists provider_response jsonb;
+alter table payments add column if not exists updated_at timestamptz not null default now();
+
+-- Auto-update updated_at column
+create or replace function update_updated_at_column()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language 'plpgsql';
+
+create trigger update_payments_updated_at
+before update on payments
+for each row execute function update_updated_at_column();
 
 -- Indexes for common queries
 create index if not exists payments_phone_status_idx
   on payments (phone, status);
 
-create index if not exists payments_checkout_id_idx
-  on payments (checkout_id);
+create index if not exists payments_transaction_id_idx
+  on payments (payhero_transaction_id);
 
 -- View for quick access checks (returns latest paid payment per phone)
+drop view if exists latest_paid_payments;
 create or replace view latest_paid_payments as
-select distinct on (phone) id, phone, package_id, amount, status, created_at, checkout_id
+select distinct on (phone) id, phone, package_id, amount, status, created_at, payhero_transaction_id
 from payments
 where status = 'paid'
 order by phone, created_at desc;
@@ -55,5 +76,3 @@ order by phone, created_at desc;
 -- plan to use Supabase client-side access for writes/reads, enable RLS and
 -- create appropriate policies. This project uses a server-side service role
 -- (`SUPABASE_SERVICE_ROLE_KEY`) for write operations in `src/app/api`.
-
-

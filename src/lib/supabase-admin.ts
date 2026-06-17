@@ -7,7 +7,6 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
   ? createClient(supabaseUrl, supabaseServiceRoleKey)
-  : null
+  : null;
 
-
-
+if (!supabaseAdmin) console.warn("Supabase Admin Client not initialized. Check ENV variables.");
