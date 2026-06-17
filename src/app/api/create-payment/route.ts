@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { CreatePaymentRequest, StkPushResponse } from '@/types/payment'
+import { payheroStkPush } from '@/lib/payhero'
 
 export async function POST(req: Request) {
   // Note: This project previously had PayHero disabled. Here we implement the
@@ -42,10 +43,13 @@ export async function POST(req: Request) {
   }
 
 
-  // PayHero integration (placeholder) — enabled only if env vars exist
-  const payheroEnabled = Boolean(process.env.PAYHERO_API_KEY)
+  // PayHero integration — enabled when `PAYHERO_STK_PUSH_URL` and
+  // `PAYHERO_BASIC_AUTH_TOKEN` (or other required env vars) are present.
+  const payheroStkUrl = process.env.PAYHERO_STK_PUSH_URL
+  const payheroAuth = process.env.PAYHERO_BASIC_AUTH_TOKEN
 
-  if (!payheroEnabled) {
+  if (!payheroStkUrl || !payheroAuth) {
+    // Not configured: return mock response so frontend can continue
     return NextResponse.json({
       message: 'PayHero not configured. Payment stored as pending.',
       checkoutId,
@@ -53,16 +57,20 @@ export async function POST(req: Request) {
     })
   }
 
-  // TODO: Replace this mock with real PayHero STK push / checkout API call.
-  // Return the expected payload to your frontend.
-  const response: StkPushResponse = {
-    CheckoutRequestID: checkoutId,
-    ResponseCode: '0',
-    ResponseDescription: 'Mock STK push created',
+  try {
+    const stk = await payheroStkPush({
+      phone,
+      amount,
+      checkoutId,
+    })
+
+    return NextResponse.json({ checkoutId, stk })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'PayHero request failed'
+    // Do NOT roll back the DB insert – we keep the payment as pending and
+    // surface the error to the frontend for debugging.
+    return NextResponse.json({ error: message, checkoutId }, { status: 502 })
   }
-
-
-  return NextResponse.json({ checkoutId, stk: response })
 }
 
 
