@@ -62,7 +62,7 @@ export default function PaymentForm({ packages }: PaymentFormProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to initiate payment');
+        throw new Error(data.error || data.details || 'Failed to initiate payment');
       }
 
       setMessage('STK Push sent! Please check your phone to enter your M-Pesa PIN.');
