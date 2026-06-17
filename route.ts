@@ -1,70 +1,110 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin'; // Assuming this path
+import axios from 'axios'; // For making HTTP requests to PayHero
 
-// Define the shape of the PayHero webhook payload (adjust based on actual PayHero docs)
-interface PayHeroWebhookPayload {
-  transaction_reference: string; // This should match AVIATOR-{paymentId}
-  status: 'COMPLETED' | 'FAILED' | 'CANCELLED'; // Or similar statuses
+// Define the shape of the request body
+interface CreatePaymentRequestBody {
+  phone: string;
+  packageId: string;
   amount: number;
-  phone_number: string;
-  // Add any other relevant fields from PayHero's callback
-  CheckoutRequestID?: string; // M-Pesa specific
-  ResultCode?: string;
-  ResultDesc?: string;
-  MerchantRequestID?: string;
 }
 
 export async function POST(req: Request) {
   try {
-    const payheroWebhookSecret = process.env.PAYHERO_WEBHOOK_SECRET;
-    // 1. Validate incoming request (e.g., check for a shared secret or signature)
-    // This is a placeholder. PayHero might send a header or a field in the body for verification.
-    // Example: if PayHero sends a 'X-Payhero-Signature' header, you'd verify it here.
-    // For simplicity, we'll assume a basic secret check if provided by PayHero, or skip for now.
-    // const signature = req.headers.get('X-Payhero-Signature');
-    // if (!verifyPayheroSignature(req.body, signature, payheroWebhookSecret)) {
-    //   return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
-    // }
-
-    const payload: PayHeroWebhookPayload = await req.json();
-    console.log('Received PayHero webhook:', payload);
-
-    // Extract our paymentId from the transaction_reference
-    const ourTransactionRef = payload.transaction_reference;
-    if (!ourTransactionRef || !ourTransactionRef.startsWith('AVIATOR-')) {
-      console.error('Invalid transaction_reference in webhook:', ourTransactionRef);
-      return NextResponse.json({ error: 'Invalid transaction reference' }, { status: 400 });
-    }
-    const paymentId = ourTransactionRef.replace('AVIATOR-', '');
-
-    let newStatus: 'paid' | 'failed' | 'cancelled' = 'failed'; // Default to failed
-    if (payload.status === 'COMPLETED' || payload.ResultCode === '0') { // Adjust based on actual PayHero success indicator
-      newStatus = 'paid';
-    } else if (payload.status === 'CANCELLED') {
-      newStatus = 'cancelled';
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Supabase admin not configured' }, { status: 500 });
     }
 
-    // 2. Update the payment status in Supabase
-    const { data, error: updateError } = await supabaseAdmin
+    const { phone, packageId, amount }: CreatePaymentRequestBody = await req.json();
+
+    // 1. Validate input
+    if (!phone || !packageId || !amount || amount <= 0) {
+      return NextResponse.json({ error: 'Invalid input data' }, { status: 400 });
+    }
+
+    // Ensure phone number is in a valid format for M-Pesa (e.g., 2547...)
+    const formattedPhone = phone.startsWith('0') ? `254${phone.substring(1)}` : phone;
+    if (!formattedPhone.match(/^2547\d{8}$/)) {
+      return NextResponse.json({ error: 'Invalid phone number format' }, { status: 400 });
+    }
+
+    // 2. Insert a pending payment record into Supabase
+    const { data: payment, error: insertError } = await supabaseAdmin
       .from('payments')
-      .update({
-        status: newStatus,
-        provider_response: payload, // Store full webhook payload
+      .insert({
+        user_phone: formattedPhone,
+        package_id: packageId,
+        amount: amount,
+        status: 'pending',
       })
-      .eq('id', paymentId)
       .select()
       .single();
 
-    if (updateError) {
-      console.error('Supabase update error for webhook:', updateError);
-      return NextResponse.json({ error: 'Failed to update payment status' }, { status: 500 });
+    if (insertError || !payment) {
+      console.error('Supabase insert error:', insertError);
+      return NextResponse.json({ error: 'Failed to create payment record' }, { status: 500 });
     }
 
-    console.log(`Payment ${paymentId} updated to status: ${newStatus}`);
-    return NextResponse.json({ message: 'Webhook received and processed successfully' }, { status: 200 });
+    const paymentId = payment.id; // Get the ID of the newly created payment record
+
+    // 3. Call PayHero STK Push API
+    const payheroApiKey = process.env.PAYHERO_API_KEY;
+    const payheroApiSecret = process.env.PAYHERO_API_SECRET;
+    const payheroStkPushUrl = process.env.PAYHERO_STK_PUSH_URL;
+    const appBaseUrl = process.env.NEXT_PUBLIC_APP_BASE_URL; // Used to construct callback URL
+
+    if (!payheroApiKey || !payheroApiSecret || !payheroStkPushUrl || !appBaseUrl) {
+      console.error('Missing PayHero environment variables');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
+    const callbackUrl = `${appBaseUrl}/api/webhook`; // PayHero will call this endpoint
+
+    // PayHero STK Push request payload (adjust based on actual PayHero API docs)
+    const payheroPayload = {
+      phone_number: formattedPhone,
+      amount: amount,
+      transaction_reference: `AVIATOR-${paymentId}`, // Use our payment ID as reference
+      callback_url: callbackUrl,
+      // Add any other required PayHero parameters like account_reference, description etc.
+      api_key: payheroApiKey, // Some APIs require key in payload, others in headers
+      api_secret: payheroApiSecret, // Some APIs require secret in payload, others in headers
+    };
+
+    const payheroHeaders = {
+      'Content-Type': 'application/json',
+      // Authorization: `Bearer ${Buffer.from(`${payheroApiKey}:${payheroApiSecret}`).toString('base64')}`, // Example for basic auth
+      // Add any other required headers for PayHero
+    };
+
+    const payheroResponse = await axios.post(payheroStkPushUrl, payheroPayload, { headers: payheroHeaders });
+
+    // 4. Handle PayHero response and update Supabase
+    const payheroData = payheroResponse.data;
+    const payheroTransactionId = payheroData.transaction_id || payheroData.CheckoutRequestID; // Adjust based on actual PayHero response
+
+    const { error: updateError } = await supabaseAdmin
+      .from('payments')
+      .update({
+        payhero_transaction_id: payheroTransactionId,
+        provider_response: payheroData, // Store full response for debugging
+      })
+      .eq('id', paymentId);
+
+    if (updateError) {
+      console.error('Supabase update error after PayHero call:', updateError);
+      // Log this error but still return success if STK push was initiated
+    }
+
+    // 5. Return success response to frontend
+    return NextResponse.json({
+      message: 'Payment initiated successfully. Check your phone for STK push.',
+      paymentId: paymentId,
+      payheroTransactionId: payheroTransactionId,
+    }, { status: 200 });
 
   } catch (error: any) {
-    console.error('Webhook processing failed:', error.message);
-    return NextResponse.json({ error: 'Failed to process webhook', details: error.message }, { status: 500 });
+    console.error('Payment initiation failed:', error.message, error.response?.data);
+    return NextResponse.json({ error: 'Failed to initiate payment', details: error.message }, { status: 500 });
   }
 }
