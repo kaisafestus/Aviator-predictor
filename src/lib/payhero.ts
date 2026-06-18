@@ -1,20 +1,22 @@
 /**
  * PayHero M-Pesa STK Push integration
- * Docs: https://backend.payhero.co.ke/api/v2/payments/stk-push
+ * Endpoint: POST https://backend.payhero.co.ke/api/v2/payments?is_active=true
  */
 
 export interface StkPushPayload {
   amount: number
-  phone_number: string   // Safaricom format: 254XXXXXXXXX
+  phone_number: string      // e.g. 0787677676 or 254787677676
   channel_id: number
-  provider: string       // "m-pesa"
+  provider: 'm-pesa'
   external_reference: string
+  customer_name?: string
   callback_url: string
 }
 
 export interface StkPushResult {
   success: boolean
   checkoutId: string | null
+  reference: string | null
   raw: Record<string, unknown>
   error?: string
 }
@@ -29,13 +31,11 @@ export function normalisePhone(phone: string): string {
   if (digits.startsWith('0') && digits.length === 10) return '254' + digits.slice(1)
   if (digits.startsWith('7') && digits.length === 9) return '254' + digits
   if (digits.startsWith('1') && digits.length === 9) return '254' + digits
-  // Return as-is and let the API reject it if invalid
   return digits
 }
 
 /**
  * Initiate an M-Pesa STK Push via PayHero.
- * Returns the CheckoutRequestID on success, or throws on failure.
  */
 export async function initiateStkPush(
   phone: string,
@@ -44,17 +44,14 @@ export async function initiateStkPush(
 ): Promise<StkPushResult> {
   const authToken = process.env.PAYHERO_AUTH_TOKEN
   const channelId = process.env.PAYHERO_CHANNEL_ID
-  const stkUrl =
-    process.env.PAYHERO_STK_PUSH_URL ||
-    'https://backend.payhero.co.ke/api/v2/payments/stk-push'
   const callbackUrl =
-    (process.env.NEXT_PUBLIC_APP_BASE_URL || '').replace(/\/$/, '') +
-    '/api/webhook'
+    (process.env.NEXT_PUBLIC_APP_BASE_URL || '').replace(/\/$/, '') + '/api/webhook'
 
   if (!authToken || !channelId) {
     return {
       success: false,
       checkoutId: null,
+      reference: null,
       raw: {},
       error: 'PayHero credentials not configured (PAYHERO_AUTH_TOKEN / PAYHERO_CHANNEL_ID)',
     }
@@ -69,8 +66,17 @@ export async function initiateStkPush(
     callback_url: callbackUrl,
   }
 
+  // ?is_active=true is required by PayHero — without it the endpoint returns 404
+  const url = 'https://backend.payhero.co.ke/api/v2/payments?is_active=true'
+
+  console.log('[PayHero] POST', url)
+  console.log('[PayHero] payload', JSON.stringify({
+    ...payload,
+    phone_number: payload.phone_number.slice(0, 6) + '****',
+  }))
+
   try {
-    const res = await fetch(stkUrl, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -79,26 +85,29 @@ export async function initiateStkPush(
       body: JSON.stringify(payload),
     })
 
-    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    const rawText = await res.text()
+    let data: Record<string, unknown> = {}
+    try { data = JSON.parse(rawText) } catch { /* not JSON */ }
+
+    console.log(`[PayHero] response HTTP ${res.status}:`, rawText.slice(0, 600))
 
     if (!res.ok) {
       const errMsg =
         (data.message as string) ||
         (data.error as string) ||
-        `PayHero HTTP ${res.status}`
-      return { success: false, checkoutId: null, raw: data, error: errMsg }
+        (data.detail as string) ||
+        `PayHero error ${res.status}: ${rawText.slice(0, 200)}`
+      return { success: false, checkoutId: null, reference: null, raw: data, error: errMsg }
     }
 
-    // PayHero returns CheckoutRequestID on success
-    const checkoutId =
-      (data.CheckoutRequestID as string) ||
-      (data.checkout_id as string) ||
-      (data.reference as string) ||
-      null
+    // 201 success shape: { success, status, reference, CheckoutRequestID }
+    const checkoutId = (data.CheckoutRequestID as string) || null
+    const reference = (data.reference as string) || null
 
-    return { success: true, checkoutId, raw: data }
+    return { success: true, checkoutId, reference, raw: data }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown network error'
-    return { success: false, checkoutId: null, raw: {}, error: message }
+    console.error('[PayHero] fetch error:', message)
+    return { success: false, checkoutId: null, reference: null, raw: {}, error: message }
   }
 }

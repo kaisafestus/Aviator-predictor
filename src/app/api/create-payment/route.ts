@@ -18,34 +18,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Supabase admin not configured' }, { status: 500 })
   }
 
-  // Insert a pending payment record first to get the UUID we'll use as external_reference
+  // Insert pending record to get the UUID we use as external_reference
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from('payments')
-    .insert({
-      phone,
-      package_id: packageId,
-      amount,
-      status: 'pending',
-    })
+    .insert({ phone, package_id: packageId, amount, status: 'pending' })
     .select('id')
     .single()
 
   if (insertError || !inserted) {
-    return NextResponse.json({ error: insertError?.message || 'Failed to create payment record' }, { status: 500 })
+    return NextResponse.json(
+      { error: insertError?.message || 'Failed to create payment record' },
+      { status: 500 }
+    )
   }
 
   const paymentId = inserted.id
-  // Use a prefix PayHero webhook can recognise
   const externalReference = `AVIATOR-${paymentId}`
 
   // Initiate M-Pesa STK Push
   const stkResult = await initiateStkPush(phone, amount, externalReference)
 
   if (!stkResult.success) {
-    // Mark the record as failed and surface the error to the client
     await supabaseAdmin
       .from('payments')
-      .update({ status: 'failed', provider_response: { error: stkResult.error, raw: stkResult.raw } })
+      .update({
+        status: 'failed',
+        provider_response: { error: stkResult.error, raw: stkResult.raw },
+      })
       .eq('id', paymentId)
 
     return NextResponse.json(
@@ -54,17 +53,18 @@ export async function POST(req: Request) {
     )
   }
 
-  // Store the PayHero CheckoutRequestID so the webhook can match it
+  // Store PayHero identifiers
   await supabaseAdmin
     .from('payments')
     .update({
-      checkout_id: stkResult.checkoutId,
+      checkout_id: stkResult.checkoutId || stkResult.reference,
+      payhero_transaction_id: stkResult.reference,
       provider_response: stkResult.raw,
     })
     .eq('id', paymentId)
 
   return NextResponse.json({
-    checkoutId: stkResult.checkoutId || externalReference,
+    checkoutId: stkResult.checkoutId || stkResult.reference || externalReference,
     paymentId,
     status: 'pending',
     message: 'STK Push sent. Check your phone and enter your M-Pesa PIN.',
