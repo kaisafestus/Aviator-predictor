@@ -1,78 +1,90 @@
--- Minimal schema for payments/access.
--- Create this in your Supabase SQL editor.
 -- Supabase schema for Aviator (payments + packages)
--- Run this SQL in the Supabase SQL editor for a new project.
+-- Safe to run on both fresh and existing databases.
+-- All destructive operations use DROP IF EXISTS first.
 
--- Required extension for `gen_random_uuid()` used for IDs.
+-- ─── Extensions ───────────────────────────────────────────────────────────────
 create extension if not exists pgcrypto;
 
--- Packages table (optional): allows storing package metadata in DB
+-- ─── Packages table ───────────────────────────────────────────────────────────
 create table if not exists packages (
-  id text primary key,
-  name text not null,
-  price numeric not null,
-  duration_minutes integer not null,
-  popular boolean not null default false,
-  created_at timestamptz not null default now()
+  id               text        primary key,
+  name             text        not null,
+  price            numeric     not null,
+  duration_minutes integer     not null,
+  popular          boolean     not null default false,
+  created_at       timestamptz not null default now()
 );
 
--- Seed example packages used by the frontend (only insert if not exists)
+-- Seed packages (skip rows that already exist)
 insert into packages (id, name, price, duration_minutes, popular)
 select * from (values
-  ('basic', 'BASIC 30MIN', 100, 30, false),
-  ('pro', 'PRO 2HR', 500, 120, true),
-  ('vip', 'VIP 24HR', 2000, 1440, false)
+  ('basic', 'BASIC 30MIN', 100,  30,   false),
+  ('pro',   'PRO 2HR',     500,  120,  true),
+  ('vip',   'VIP 24HR',    2000, 1440, false)
 ) as v(id, name, price, duration_minutes, popular)
 where not exists (select 1 from packages p where p.id = v.id);
 
-
--- Payments table: records payment attempts and statuses
+-- ─── Payments table ───────────────────────────────────────────────────────────
 create table if not exists payments (
-  id uuid primary key default gen_random_uuid(),
-  phone text not null,
-  package_id text not null references packages(id) on update cascade on delete restrict,
-  amount numeric not null,
-  status text not null default 'pending' check (status in ('pending','paid','failed','cancelled')),
-  payhero_transaction_id text,
-  provider_response jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  id                      uuid        primary key default gen_random_uuid(),
+  phone                   text        not null,
+  package_id              text        not null references packages(id) on update cascade on delete restrict,
+  amount                  numeric     not null,
+  status                  text        not null default 'pending'
+                            check (status in ('pending','paid','failed','cancelled')),
+  checkout_id             text,
+  payhero_transaction_id  text,
+  provider_response       jsonb,
+  expires_at              timestamptz,
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now()
 );
 
--- Ensure columns exist if the table was created by an older version of the schema
+-- Add columns safely (no-op if they already exist)
+alter table payments add column if not exists checkout_id            text;
 alter table payments add column if not exists payhero_transaction_id text;
-alter table payments add column if not exists provider_response jsonb;
-alter table payments add column if not exists updated_at timestamptz not null default now();
+alter table payments add column if not exists provider_response      jsonb;
+alter table payments add column if not exists expires_at             timestamptz;
+alter table payments add column if not exists updated_at             timestamptz not null default now();
 
--- Auto-update updated_at column
+-- ─── auto-update updated_at ───────────────────────────────────────────────────
 create or replace function update_updated_at_column()
 returns trigger as $$
 begin
   new.updated_at = now();
   return new;
 end;
-$$ language 'plpgsql';
+$$ language plpgsql;
 
+-- Drop before re-create to avoid the "already exists" error
+drop trigger if exists update_payments_updated_at on payments;
 create trigger update_payments_updated_at
-before update on payments
-for each row execute function update_updated_at_column();
+  before update on payments
+  for each row execute function update_updated_at_column();
 
--- Indexes for common queries
-create index if not exists payments_phone_status_idx
-  on payments (phone, status);
+-- ─── Indexes ──────────────────────────────────────────────────────────────────
+create index if not exists payments_phone_status_idx     on payments (phone, status);
+create index if not exists payments_transaction_id_idx   on payments (payhero_transaction_id);
+create index if not exists payments_checkout_id_idx      on payments (checkout_id);
+create index if not exists payments_phone_expires_idx    on payments (phone, expires_at);
 
-create index if not exists payments_transaction_id_idx
-  on payments (payhero_transaction_id);
-
--- View for quick access checks (returns latest paid payment per phone)
+-- ─── View: latest active paid payment per phone ───────────────────────────────
 drop view if exists latest_paid_payments;
-create or replace view latest_paid_payments as
-select distinct on (phone) id, phone, package_id, amount, status, created_at, payhero_transaction_id
+create view latest_paid_payments as
+select distinct on (phone)
+  id,
+  phone,
+  package_id,
+  amount,
+  status,
+  created_at,
+  expires_at,
+  payhero_transaction_id
 from payments
 where status = 'paid'
+  and (expires_at is null or expires_at > now())
 order by phone, created_at desc;
 
--- Note: Row Level Security (RLS) is intentionally not enabled here. If you
--- plan to use Supabase client-side access for writes/reads, enable RLS and
--- create appropriate policies. This project uses a server-side service role
--- (`SUPABASE_SERVICE_ROLE_KEY`) for write operations in `src/app/api`.
+-- ─── Notes ────────────────────────────────────────────────────────────────────
+-- RLS is intentionally disabled. All writes go through server-side API routes
+-- using SUPABASE_SERVICE_ROLE_KEY (src/lib/supabase-admin.ts).
