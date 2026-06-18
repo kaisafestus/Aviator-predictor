@@ -58,7 +58,7 @@ function requestNotificationPermission() {
 }
 
 export default function Packages() {
-  const [loading, setLoading] = useState(false)
+  const [loadingId, setLoadingId] = useState<string | null>(null)
   const [notification, setNotification] = useState<Notification | null>(null)
 
   useEffect(() => {
@@ -81,8 +81,8 @@ export default function Packages() {
       return
     }
 
-    if (loading) return
-    setLoading(true)
+    if (loadingId) return
+    setLoadingId(pkg.id)
     try {
       const res = await fetch('/api/create-payment', {
         method: 'POST',
@@ -112,7 +112,7 @@ export default function Packages() {
 
       window.location.href = `/payment/success?${params.toString()}`
     } finally {
-      setLoading(false)
+      setLoadingId(null)
     }
   }
 
@@ -189,10 +189,10 @@ export default function Packages() {
 
                   <button
                     onClick={() => handlePay(pkg)}
-                    disabled={loading}
+                    disabled={loadingId !== null}
                     className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-6 px-8 rounded-2xl text-xl font-black shadow-2xl hover:from-red-500 hover:to-red-600 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed border border-red-500/30"
                   >
-                    {loading ? 'PLEASE WAIT...' : 'BUY'}
+                    {loadingId === pkg.id ? 'PLEASE WAIT...' : 'BUY'}
                   </button>
                 </div>
               </div>
