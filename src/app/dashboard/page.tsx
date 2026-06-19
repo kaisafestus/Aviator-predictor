@@ -354,10 +354,22 @@ export default function Dashboard() {
 
             {/* Platforms footer */}
             <div className="mt-12 sm:mt-20 text-center">
-              <p className="text-base sm:text-2xl text-gray-500 mb-6 sm:mb-10">Works perfectly on all platforms</p>
-              <div className="flex flex-wrap justify-center gap-4 sm:gap-10">
-                {['🏆 BETIKA', '⚡ PEPETA', '🎯 ODITBET', '⭐ MELBET'].map((p, i) => (
-                  <span key={p} className={`text-xl sm:text-4xl font-black hover:scale-110 transition-all cursor-pointer ${i % 2 === 0 ? 'text-red-400' : 'text-[#22c55e]'}`}>{p}</span>
+              <p className="text-base sm:text-xl text-gray-500 mb-8">Works perfectly on all platforms</p>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 max-w-2xl mx-auto">
+                {[
+                  { letter: 'B',  name: 'BETIKA',  from: 'from-red-600',    to: 'to-red-800',    text: 'text-white',  border: 'border-red-600/30'    },
+                  { letter: 'P',  name: 'PEPETA',  from: 'from-green-500',  to: 'to-green-700',  text: 'text-white',  border: 'border-green-600/30'  },
+                  { letter: 'O',  name: 'ODIBET',  from: 'from-orange-500', to: 'to-orange-700', text: 'text-white',  border: 'border-orange-500/30' },
+                  { letter: 'M',  name: 'MELBET',  from: 'from-yellow-400', to: 'to-yellow-600', text: 'text-black',  border: 'border-yellow-500/30' },
+                  { letter: '1X', name: '1XBET',   from: 'from-blue-600',   to: 'to-blue-800',   text: 'text-white',  border: 'border-blue-500/30'   },
+                  { letter: '+',  name: 'ALL',     from: 'from-[#22c55e]',  to: 'to-green-700',  text: 'text-black',  border: 'border-[#22c55e]/30'  },
+                ].map((p) => (
+                  <div key={p.name} className={`flex flex-col items-center gap-2 glass rounded-2xl p-3 border ${p.border} hover:scale-105 transition-all`}>
+                    <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${p.from} ${p.to} flex items-center justify-center shadow-md`}>
+                      <span className={`${p.text} font-black text-sm`}>{p.letter}</span>
+                    </div>
+                    <span className="text-white font-black text-xs">{p.name}</span>
+                  </div>
                 ))}
               </div>
             </div>
