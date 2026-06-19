@@ -27,12 +27,18 @@ export default function Home() {
           </p>
 
           {/* CTA buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12 px-4">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12 px-4 flex-wrap">
             <Link
               href="/packages"
               className="w-full sm:w-auto glass bg-gradient-to-r from-red-600 to-red-700 text-white text-lg sm:text-xl font-black px-8 sm:px-12 py-5 rounded-2xl hover:scale-105 transition-all shadow-2xl shadow-red-900/50 border border-red-500/30 text-center"
             >
               BUY SIGNALS NOW
+            </Link>
+            <Link
+              href="/demo"
+              className="w-full sm:w-auto bg-gradient-to-r from-yellow-500 to-orange-500 text-black text-lg sm:text-xl font-black px-8 sm:px-10 py-5 rounded-2xl hover:scale-105 transition-all shadow-2xl shadow-yellow-900/40 border border-yellow-400/50 text-center"
+            >
+              👀 TRY FREE DEMO
             </Link>
             <Link
               href="/dashboard"

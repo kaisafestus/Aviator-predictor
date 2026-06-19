@@ -20,6 +20,9 @@ export default function Navbar() {
             <Link href="/" className="text-gray-300 hover:text-[#22c55e] transition-colors font-medium">
               Home
             </Link>
+            <Link href="/demo" className="text-yellow-400 hover:text-yellow-300 transition-colors font-bold">
+              👀 Demo
+            </Link>
             <Link href="/packages" className="text-gray-300 hover:text-[#22c55e] transition-colors font-medium">
               Packages
             </Link>
@@ -47,20 +50,15 @@ export default function Navbar() {
       {/* Mobile dropdown */}
       {menuOpen && (
         <div className="sm:hidden bg-[#111827] border-t border-[#22c55e]/20 px-4 py-4 flex flex-col gap-3">
-          <Link
-            href="/"
-            onClick={() => setMenuOpen(false)}
-            className="text-gray-300 hover:text-[#22c55e] transition-colors font-medium py-2 border-b border-gray-700/40"
-          >
-            Home
-          </Link>
-          <Link
-            href="/packages"
-            onClick={() => setMenuOpen(false)}
-            className="text-gray-300 hover:text-[#22c55e] transition-colors font-medium py-2 border-b border-gray-700/40"
-          >
-            Packages
-          </Link>
+          <Link href="/" onClick={() => setMenuOpen(false)} className="text-gray-300 hover:text-[#22c55e] transition-colors font-medium py-2 border-b border-gray-700/40">
+              Home
+            </Link>
+            <Link href="/demo" onClick={() => setMenuOpen(false)} className="text-yellow-400 hover:text-yellow-300 transition-colors font-bold py-2 border-b border-gray-700/40">
+              👀 Free Demo
+            </Link>
+            <Link href="/packages" onClick={() => setMenuOpen(false)} className="text-gray-300 hover:text-[#22c55e] transition-colors font-medium py-2 border-b border-gray-700/40">
+              Packages
+            </Link>
           <Link
             href="/dashboard"
             onClick={() => setMenuOpen(false)}
