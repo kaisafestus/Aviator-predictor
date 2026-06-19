@@ -49,19 +49,40 @@ function getVipSignalMs(crashMs: number) {
   return Math.floor(crashMs * 0.70)
 }
 
-// ── Social proof ticker data ────────────────────────────────────────────────
-const tickerItems = [
-  'John K. just cashed out at 47x 🔥',
-  'Mary W. made KSH 8,700 this hour 💰',
-  'Ahmed S. cashed out at 312x 🚀',
-  'Peter O. just bought VIP package ⭐',
-  'Fatma M. cashed out at 89x 🎯',
-  'David M. made KSH 45,000 today 💎',
-  'Grace L. cashed out at 156x 🔥',
-  'Joseph N. just activated VIP signals ✅',
-  'Sarah K. made KSH 12,300 this session 💰',
-  'Amina H. cashed out at 523x 🚀',
+// ── Social proof feed data ──────────────────────────────────────────────────
+interface FeedItem {
+  initials: string
+  name: string
+  action: string
+  multiplier: string | null
+  amount: string | null
+  color: string
+  tag: 'WIN' | 'BIG WIN' | 'VIP' | 'MEGA'
+}
+
+const FEED_ITEMS: FeedItem[] = [
+  { initials: 'JK', name: 'John K.',   action: 'Cashed out',     multiplier: '47.3x',  amount: 'KSH 4,730',  color: 'from-green-500 to-emerald-600',  tag: 'WIN'     },
+  { initials: 'MW', name: 'Mary W.',   action: 'Cashed out',     multiplier: '89.1x',  amount: 'KSH 8,910',  color: 'from-pink-500 to-rose-600',      tag: 'WIN'     },
+  { initials: 'AS', name: 'Ahmed S.',  action: 'Cashed out',     multiplier: '312x',   amount: 'KSH 31,200', color: 'from-yellow-400 to-orange-500',  tag: 'BIG WIN' },
+  { initials: 'PO', name: 'Peter O.',  action: 'Just activated', multiplier: null,     amount: null,         color: 'from-blue-500 to-cyan-500',      tag: 'VIP'     },
+  { initials: 'FM', name: 'Fatma M.',  action: 'Cashed out',     multiplier: '156.5x', amount: 'KSH 15,650', color: 'from-purple-500 to-violet-600',  tag: 'BIG WIN' },
+  { initials: 'DM', name: 'David M.',  action: 'Cashed out',     multiplier: '23.8x',  amount: 'KSH 2,380',  color: 'from-teal-500 to-cyan-600',      tag: 'WIN'     },
+  { initials: 'GL', name: 'Grace L.',  action: 'Cashed out',     multiplier: '523x',   amount: 'KSH 52,300', color: 'from-yellow-400 to-amber-500',   tag: 'MEGA'    },
+  { initials: 'JN', name: 'Joseph N.', action: 'Just activated', multiplier: null,     amount: null,         color: 'from-indigo-500 to-blue-600',    tag: 'VIP'     },
+  { initials: 'SK', name: 'Sarah K.',  action: 'Cashed out',     multiplier: '41.2x',  amount: 'KSH 12,360', color: 'from-rose-400 to-pink-600',      tag: 'WIN'     },
+  { initials: 'AH', name: 'Amina H.',  action: 'Cashed out',     multiplier: '788x',   amount: 'KSH 78,800', color: 'from-yellow-300 to-yellow-500',  tag: 'MEGA'    },
+  { initials: 'KO', name: 'Kevin O.',  action: 'Cashed out',     multiplier: '67.4x',  amount: 'KSH 6,740',  color: 'from-green-400 to-lime-500',     tag: 'WIN'     },
+  { initials: 'NW', name: 'Nadia W.',  action: 'Just activated', multiplier: null,     amount: null,         color: 'from-fuchsia-500 to-pink-500',   tag: 'VIP'     },
+  { initials: 'BM', name: 'Brian M.',  action: 'Cashed out',     multiplier: '199x',   amount: 'KSH 19,900', color: 'from-orange-400 to-red-500',     tag: 'BIG WIN' },
+  { initials: 'LN', name: 'Lilian N.', action: 'Cashed out',     multiplier: '14.7x',  amount: 'KSH 1,470',  color: 'from-emerald-400 to-green-600',  tag: 'WIN'     },
 ]
+
+const TAG_STYLES: Record<FeedItem['tag'], string> = {
+  'WIN':     'bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/40',
+  'BIG WIN': 'bg-yellow-400/20 text-yellow-400 border border-yellow-400/40',
+  'VIP':     'bg-blue-500/20 text-blue-400 border border-blue-400/40',
+  'MEGA':    'bg-gradient-to-r from-yellow-400/30 to-orange-400/30 text-yellow-300 border border-yellow-400/60',
+}
 
 // Past rounds for the history strip
 function getPastRounds(currentRoundIndex: number, count: number) {
@@ -88,14 +109,22 @@ export default function Demo() {
   const [vipSignalFired, setVipSignalFired] = useState(false)
   const [missedSignalToast, setMissedSignalToast] = useState(false)
   const [nextSignalCountdown, setNextSignalCountdown] = useState(0)
-  const [tickerIndex, setTickerIndex] = useState(0)
+  const [visibleFeed, setVisibleFeed] = useState<FeedItem[]>([])
   const [pastRounds, setPastRounds] = useState<Array<{ multiplier: number; isRare: boolean }>>([])
   const prevRoundRef = useRef(-1)
   const vipFiredRef = useRef(false)
+  const feedIndexRef = useRef(0)
 
-  // Ticker rotates every 3s
+  // Feed: show first 4, then cycle in a new card every 2.5s
   useEffect(() => {
-    const t = setInterval(() => setTickerIndex((i) => (i + 1) % tickerItems.length), 3000)
+    setVisibleFeed(FEED_ITEMS.slice(0, 4))
+    feedIndexRef.current = 4
+
+    const t = setInterval(() => {
+      const next = FEED_ITEMS[feedIndexRef.current % FEED_ITEMS.length]
+      feedIndexRef.current += 1
+      setVisibleFeed((prev) => [next, ...prev.slice(0, 4)])
+    }, 2500)
     return () => clearInterval(t)
   }, [])
 
@@ -184,15 +213,66 @@ export default function Demo() {
           </p>
         </div>
 
-        {/* Social proof ticker */}
-        <div className="glass border border-[#22c55e]/20 rounded-2xl px-4 sm:px-6 py-3 mb-6 overflow-hidden">
-          <div className="flex items-center gap-3">
-            <span className="text-[#22c55e] text-xs font-black shrink-0 uppercase tracking-widest">LIVE</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-sm sm:text-base font-medium truncate animate-pulse">
-                {tickerItems[tickerIndex]}
-              </p>
+        {/* ── Social proof live feed ── */}
+        <div className="glass border border-[#22c55e]/20 rounded-3xl overflow-hidden mb-6">
+          {/* Feed header */}
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/5 bg-white/[0.03]">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e] animate-pulse" />
+              <span className="text-[#22c55e] text-xs sm:text-sm font-black uppercase tracking-widest">Live Activity</span>
             </div>
+            <span className="text-gray-500 text-xs">{FEED_ITEMS.length}+ players active now</span>
+          </div>
+
+          {/* Feed rows */}
+          <div className="divide-y divide-white/5">
+            {visibleFeed.map((item, i) => (
+              <div
+                key={`${item.initials}-${i}`}
+                className={`flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 transition-all duration-500 ${
+                  i === 0 ? 'bg-white/[0.04]' : ''
+                } ${item.tag === 'MEGA' ? 'bg-yellow-400/5' : ''}`}
+              >
+                {/* Avatar */}
+                <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br ${item.color} flex items-center justify-center text-white font-black text-xs sm:text-sm shrink-0 shadow-lg`}>
+                  {item.initials}
+                </div>
+
+                {/* Text */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-white font-bold text-sm sm:text-base">{item.name}</span>
+                    {i === 0 && (
+                      <span className="text-[10px] bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/30 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">just now</span>
+                    )}
+                  </div>
+                  <p className="text-gray-400 text-xs sm:text-sm truncate">
+                    {item.action}{item.multiplier ? ` at ${item.multiplier}` : ' VIP Signals'}
+                  </p>
+                </div>
+
+                {/* Right side — amount chip or VIP badge */}
+                <div className="shrink-0 text-right">
+                  {item.amount ? (
+                    <div className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-xs sm:text-sm font-black ${TAG_STYLES[item.tag]}`}>
+                      +{item.amount}
+                    </div>
+                  ) : (
+                    <div className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-xs sm:text-sm font-black ${TAG_STYLES[item.tag]}`}>
+                      {item.tag}
+                    </div>
+                  )}
+                  {item.multiplier && (
+                    <div className="text-gray-500 text-[10px] sm:text-xs mt-0.5 text-right">{item.multiplier}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer hint */}
+          <div className="px-4 sm:px-6 py-2.5 border-t border-white/5 bg-white/[0.02] text-center">
+            <span className="text-gray-600 text-xs">Updates every few seconds • Real player activity</span>
           </div>
         </div>
 
